@@ -1,0 +1,164 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MovementTest : MonoBehaviour
+{
+    //Add Triple Jump, Slide, Etc..
+
+    [Header("Keybinds")]
+    [SerializeField] public KeyCode jumpKey = KeyCode.Space;
+    [SerializeField] public KeyCode sprintKey = KeyCode.LeftShift;
+
+    [Header("Assignables")]
+    [SerializeField] Transform Pos;
+    [SerializeField] Rigidbody rb;
+    [SerializeField] LayerMask isGround;
+
+    [Header("Ground Movement")]
+    [SerializeField] float _playerWalkSpeed = 9f;
+    [SerializeField] float _playerSprintSpeed = 11f;
+    [SerializeField] float _playerDrag = 0.025f;
+    private float desiredMoveSpeed;
+    private float lastDesiredMoveSpeed;
+    private float _playerSpeed;
+    public bool grounded;
+
+    [Header("Jump Movement")]
+    [SerializeField] float _playerJumpForce = 15f;
+    [SerializeField] float _playerJumpCount = 0;
+    [SerializeField] float _coyoteTimeTimer = 0f;
+    [SerializeField] float _coyoteTimeSetTime = 0.25f;
+    bool isJumping = false;
+
+    Vector3 moveDir;
+    float horizontalInput;
+    float verticalInput;
+
+    public MovementState _currentState;
+    public enum MovementState
+    {
+        crouching,
+        walking,
+        sprinting,
+        air,
+        dashing
+    }
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        rb.GetComponent<Rigidbody>();
+        rb.freezeRotation = true;
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        //This one line lets half the script function
+        grounded = Physics.Raycast(transform.position, Vector3.down, 1.75f * 0.5f + 0.2f, isGround);
+
+        GetInputs();
+        StateHandler();
+        SpeedControl();
+
+        if (_coyoteTimeTimer > 0 && !grounded)
+            _coyoteTimeTimer -= Time.deltaTime;
+        else if (grounded)
+            _coyoteTimeTimer = _coyoteTimeSetTime;
+    }
+
+    private void FixedUpdate()
+    {
+        Walking();
+    }
+
+    //Gets user Inputs for jump, dash, crouching, walking, sprinting, etc..
+    void GetInputs()
+    {
+        //A & D for Horizontal, W & S for Vertical
+        horizontalInput = Input.GetAxisRaw("Horizontal");
+        verticalInput = Input.GetAxisRaw("Vertical");
+
+        if (grounded && Input.GetKeyDown(jumpKey) && isJumping == false && _playerJumpCount < 2)
+        {
+            // _playerJumpCount++;
+            isJumping = true;
+            rb.velocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+            rb.AddForce(transform.up * _playerJumpForce, ForceMode.Impulse);
+        }
+        else if (!grounded && Input.GetKeyDown(jumpKey) && isJumping == false && _coyoteTimeTimer > 0)
+        {
+            // _playerJumpCount = 0;
+            isJumping = true;
+            rb.velocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+            rb.AddForce(transform.up * _playerJumpForce, ForceMode.Impulse);
+        }
+        else if (grounded && Input.GetKeyDown(jumpKey) && isJumping == false && _playerJumpCount >= 2)
+        {
+            // _playerJumpCount = 0;
+            isJumping = true;
+            rb.velocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+            rb.AddForce(transform.up * (_playerJumpForce * 1.5f), ForceMode.Impulse);
+        }
+        else if (grounded && !Input.GetKeyDown(jumpKey))
+        {
+            isJumping = false;
+        }
+    }
+
+    //utilizes Enum MovementState for Movement organization
+    void StateHandler()
+    {
+        //Sprinting
+        if (grounded && Input.GetKey(sprintKey))
+        {
+            Invoke(nameof(EndJumpSlide), 0.25f);
+            _currentState = MovementState.sprinting;
+            _playerSpeed = _playerSprintSpeed;
+            rb.drag = _playerDrag * 9;
+        }
+        //Walking
+        else if (grounded)
+        {
+            Invoke(nameof(EndJumpSlide), 0.25f);
+            _currentState = MovementState.walking;
+            _playerSpeed = _playerWalkSpeed;
+            rb.drag = _playerDrag * 2;
+        }
+        //Air
+        else
+        {
+            _currentState = MovementState.air;
+            rb.drag = _playerDrag;
+        }
+    }
+    void SpeedControl()
+    {
+        Vector3 flatVel = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+
+        if (flatVel.magnitude > _playerSpeed)
+        {
+            Vector3 limitVel = flatVel.normalized * _playerSpeed;
+            rb.velocity = new Vector3(limitVel.x, rb.velocity.y, limitVel.z);
+        }
+    }
+
+    void EndJumpSlide()
+    {
+        rb.drag = 0;
+    }
+
+    //Basic movement on X & Z axis. Need to add better drag and less slippery controlls here soon.
+    void Walking()
+    {
+        moveDir = Pos.forward * verticalInput + Pos.right * horizontalInput;
+
+        //will be improved upon
+        if (grounded)
+            rb.AddForce(moveDir.normalized * _playerSpeed * 10f, ForceMode.Force);
+        else if (!grounded)
+            rb.AddForce(moveDir.normalized * _playerSpeed * 10f * 0.6f, ForceMode.Force);
+    }
+
+}
